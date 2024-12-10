@@ -22,14 +22,22 @@ struct Movie {
 
 async fn get_movie(Path(movie_id): Path<String>, State(state): State<AppState>) -> Json<Response> {
     // check if cached
-    let mut cache = state.cache.lock().unwrap();
+    let mut cache = match state.cache.lock() {
+        Ok(c) => c,
+        Err(_) => return Json(Response::Error(json!("failed to acquire cache lock"))),
+    };
+
     if let Some(movie) = cache.get(&movie_id) {
         debug!("fetched movie {} from cache", movie.id);
         return Json(Response::Ok(json!(movie)));
     }
 
     // if not, try the db and cache the result if exists
-    let db = state.db.lock().unwrap();
+    let db = match state.db.lock() {
+        Ok(db) => db,
+        Err(_) => return Json(Response::Error(json!("failed to acquire db lock"))),
+    };
+
     match db.get(&movie_id) {
         Some(movie) => {
             debug!("fetched movie {} from db", movie.id);
@@ -45,7 +53,11 @@ async fn create_movie(
     extract::Json(movie): extract::Json<Movie>,
 ) -> Json<Response> {
     // check if already exists
-    let mut db = state.db.lock().unwrap();
+    let mut db = match state.db.lock() {
+        Ok(db) => db,
+        Err(_) => return Json(Response::Error(json!("failed to acquire db lock"))),
+    };
+
     if db.get(&movie.id).is_some() {
         return Json(Response::Error(json!("movie already exists")));
     }
@@ -74,5 +86,5 @@ async fn main() {
         .expect("failed to bind to address");
 
     // run the app
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app).await.expect("server failed");
 }
